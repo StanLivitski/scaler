@@ -72,8 +72,8 @@ var scaler = function()
 			'fontSize': defaultHandler,
 		},
 
-		// This function gets called the page's DOM is fully loaded
-		// and when the browser window is resized. 
+		// This function gets called when the page's DOM is fully
+		// loaded and each time the browser window is resized. 
 		// It should compute common variables needed when styling
 		// various elements and store them in the `context` object.
 		// The `$` argument will contain the scaler's jQuery reference.
@@ -86,19 +86,19 @@ var scaler = function()
 
 		// The default implementation of a CSS property handler.
 		// Assuming that the scaler data value for the property
-		// is a JavaScript expression, evaluates it in the context
-		// of the function's `context` argument, and logs any
-		// errors that might occur. The result is then treated
+		// is a JavaScript expression, it evaluates that expression
+		// in the context of the `context` argument and logs
+		// any errors that might occur. The result is then treated
 		// depending on the `params` argument, which is expected to
 		// be an array.
 		// If `params[2]` is a function, this handler calls it with
 		// the current HTML element as `this`, and the intermediate
-		// result and `context` as arguments, and applies the result
-		// as CSS property value. Otherwise that value is obtained by
-		// appending a suffix to an intermediate finite numeric result,
-		// or if that result is an array, to each of
-		// its finite numeric elements, and concatenating
-		// all elements thus converted using space as separator. The
+		// result and `context` as arguments, and assigns the result
+		// to a CSS property. Otherwise the assigned value is obtained
+		// by appending a suffix to an intermediate finite numeric
+		// result, or, if that result is an array, to each of
+		// its finite numeric elements, and concatenating all
+		// elements thus converted using space as the separator. The
 		// suffix is equal to `params[0]`, or "px" if `params[0]` is
 		// undefined or null.
 		// If `params[1]` is defined, it is then used as CSS property
@@ -106,53 +106,98 @@ var scaler = function()
 		// argument. The handler assigns a CSS property with the above
 		// key and value to the current HTML element.
 		// That assignment is made using jQuery. Note that jQuery may
-		// append a suffix to a CSS value on its own if it doesn't have
-		// one. 
+		// append its own suffix to a CSS value if a suffix is required
+		// and missing. 
 		defaultHandler: defaultHandler,
-	};
 
+		// Call this function to change values of Scaler attributes
+		// on specific page element(s), or after changing such values
+		// with jQuery.data(). It can also add Scaler attributes to
+		// DOM elements of class "scaler". Scaler will recompute the
+		// Javascript expressions and re-apply styles to selected
+		// elements before this function returns.
+		//  
+		// `elements` takes a DOM element, an array of DOM elements,
+		// a jQuery object that wraps DOM elements, or a jQuery selector
+		// expression to look up DOM elements that will have new
+		// Scaler's attributes applied to them.
+		//  
+		// `attrs` should be an object with camel-cased CSS property
+		// names (DOM format) mapped to new Scaler attribute values.
+		//  
+		// This function does not return a value.
+		update: function(elements, attrs)
+		{
+			if (!(elements instanceof $))
+				elements = $(elements);
+			var prefix = api.SCALER_DATA_PREFIX;
+			var unprefix = api.SCALER_CACHE_PREFIX;
+			if (attrs instanceof Object)
+				for (var key in attrs)
+				{
+					var cssKey = key[0].toLowerCase() + key.slice(1);
+					var params = propertyHandler(cssKey).slice(1);
+					if (undefined != params[1]) cssKey = params[1];
+					elements.css(cssKey, '');
+					elements.removeData(unprefix + key);
+					var value = attrs[key];
+					key = key[0].toUpperCase() + key.slice(1);
+					if (undefined === value)
+						elements.removeData(prefix + key);
+					else
+						elements.data(prefix + key, value);
+				}
+			else
+				elements.each(function() {
+					var data = $(this).data();
+					for (var key in data)
+						if (key.slice(0, unprefix.length) == unprefix)
+							$(this).removeData(key);
+				});
+			var context = {};
+			api.prepareContext(context, $);
+			elements.each(function() { updateCSS(this, context) });
+		}
+	};
+	function propertyHandler(key)
+	{
+		var handler = [];
+		var params = api.STYLES[key];
+		if (params === undefined)
+		{
+			if (console !== undefined && 'warn' in console)
+				console.warn('Unknown scaler property: ' + key);
+		}
+		else if (params instanceof Array)
+			handler = params;
+		else
+			handler[0] = params;
+		return handler;
+	}
+	function updateCSS(domElement, context)
+	{
+		var prefix = api.SCALER_DATA_PREFIX;
+		var unprefix = api.SCALER_CACHE_PREFIX;
+		var data = $(domElement).data();
+		for (var key in data)
+			if (key.length > prefix.length
+			&& key.slice(0, prefix.length) == prefix
+			&& key.slice(0, unprefix.length) != unprefix)
+			{
+				var value = data[key];
+				key = key[prefix.length].toLowerCase() +
+					key.slice(prefix.length + 1);
+				var handler = propertyHandler(key);
+				if (handler[0] instanceof Function)
+					handler[0].call(domElement, key, value, handler.slice(1), context);
+			}
+	}
 	function onResize()
 	{
 		var context = {};
 		api.prepareContext(context, $);
 		var elements = $('.' + api.SCALER_CLASS_NAME);
-		elements.each(function ()
-		{
-			var prefix = api.SCALER_DATA_PREFIX;
-			var unprefix = api.SCALER_CACHE_PREFIX;
-			var data = $(this).data();
-			for (var key in data)
-				if (key.length > prefix.length
-				&& key.slice(0, prefix.length) == prefix
-				&& key.slice(0, unprefix.length) != unprefix)
-				{
-					var value = data[key];
-					key = key[prefix.length].toLowerCase() +
-						key.slice(prefix.length + 1);
-					var handler = undefined;
-					var params = api.STYLES[key];
-					if (params === undefined)
-					{
-						if (console !== undefined && 'warn' in console)
-							console.warn('Unknown scaler property: ' + key);
-					}
-					else if (params instanceof Array)
-					{
-						if (0 < params.length)
-						{
-							handler = params[0];
-							params = params.slice(1);
-						}
-					}
-					else
-					{
-						handler = params;
-						params = [];
-					}
-					if (handler instanceof Function)
-						handler.call(this, key, value, params, context);
-				}
-		});
+		elements.each(function() { updateCSS(this, context) });
 	}
 	function defaultHandler(property, value, params, context)
 	{
