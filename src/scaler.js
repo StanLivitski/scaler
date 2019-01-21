@@ -74,7 +74,7 @@ var scaler = function()
 
 		// This function gets called when the page's DOM is fully
 		// loaded and each time the browser window is resized. 
-		// It should compute common variables needed when styling
+		// It should compute common variables needed for styling
 		// various elements and store them in the `context` object.
 		// The `$` argument will contain the scaler's jQuery reference.
 		prepareContext: function(context, $)
